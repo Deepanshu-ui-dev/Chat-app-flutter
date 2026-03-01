@@ -1,21 +1,87 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+final _firebase = FirebaseAuth.instance;
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState ();
+  State<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
   int selectedTab = 0;
   bool obscure = true;
   bool obscureConfirm = true;
+  bool _isLoading = false;
+
+  final _formKey = GlobalKey<FormState>();
 
   final email = TextEditingController();
   final password = TextEditingController();
   final confirmPassword = TextEditingController();
   final name = TextEditingController();
+
+  Future<void> _submit() async {
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final enteredEmail = email.text.trim();
+    final enteredPassword = password.text.trim();
+
+    try {
+      if (selectedTab == 0) {
+        /// LOGIN
+        await _firebase.signInWithEmailAndPassword(
+          email: enteredEmail,
+          password: enteredPassword,
+        );
+      } else {
+        /// SIGNUP
+        await _firebase.createUserWithEmailAndPassword(
+          email: enteredEmail,
+          password: enteredPassword,
+        );
+      }
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message ?? 'Authentication Failed'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Try again.'),
+        ),
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    confirmPassword.dispose();
+    name.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,19 +117,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 8),
-
-                const Text(
-                  "Connect instantly with your friends",
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 15,
-                  ),
-                ),
-
                 const SizedBox(height: 40),
 
-                /// Card Container
                 Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
@@ -77,63 +132,21 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ],
                   ),
-                  child: Column(
-                    children: [
-
-                      /// Segmented Control
-                      Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(30),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: selectedTab == 0
+                              ? _buildLogin()
+                              : _buildSignup(),
                         ),
-                        child: Row(
-                          children: [
-                            _buildTab("Login", 0),
-                            _buildTab("Create Account", 1),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 35),
-
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        child: selectedTab == 0
-                            ? _buildLogin()
-                            : _buildSignup(),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-
-                const SizedBox(height: 40),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTab(String text, int index) {
-    bool isSelected = selectedTab == index;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => selectedTab = index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.black : Colors.transparent,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -163,8 +176,6 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       key: const ValueKey("signup"),
       children: [
-        _input("Full Name", name, false),
-        const SizedBox(height: 20),
         _input("Email", email, false),
         const SizedBox(height: 20),
         _input("Password", password, obscure,
@@ -188,12 +199,28 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _input(String label, TextEditingController controller,
-      bool obscureText,
-      {Widget? suffix}) {
-    return TextField(
+  Widget _input(
+    String label,
+    TextEditingController controller,
+    bool obscureText, {
+    Widget? suffix,
+  }) {
+    return TextFormField(
       controller: controller,
       obscureText: obscureText,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return "$label is required";
+        }
+        if (label == "Password" && value.length < 6) {
+          return "Minimum 6 characters required";
+        }
+        if (label == "Confirm Password" &&
+            value != password.text) {
+          return "Passwords do not match";
+        }
+        return null;
+      },
       decoration: InputDecoration(
         labelText: label,
         filled: true,
@@ -212,21 +239,25 @@ class _AuthScreenState extends State<AuthScreen> {
       width: double.infinity,
       height: 55,
       child: ElevatedButton(
-        onPressed: () {},
+        onPressed: _isLoading ? null : _submit,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.black,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          elevation: 0,
         ),
-        child: Text(
-          text,
-          style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: Colors.white),
-        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(
+                color: Colors.white,
+              )
+            : Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }
