@@ -32,15 +32,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      // 1️⃣ Fetch user profile from database
       final response = await supabase
           .from('users')
           .select()
           .eq('id', user!.id)
-          .single();
+          .maybeSingle();
 
-      // 2️⃣ Generate avatar URL from bucket
-      final imagePath = 'user_images/${user!.id}.jpg';
+      final imagePath = '${user!.id}.jpg';
 
       final publicUrl =
           supabase.storage.from('avatars').getPublicUrl(imagePath);
@@ -61,19 +59,18 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
         title: const Text(
           "Chatify",
           style: TextStyle(
-              fontWeight: FontWeight.bold, color: Colors.white),
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
-
       body: _buildBody(),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _bottomIndex,
         onTap: (index) {
@@ -110,12 +107,15 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_bottomIndex == 0) {
       return const Center(child: Text("Chats Coming Soon"));
     }
+
     if (_bottomIndex == 1) {
       return const Center(child: Text("All Contacts"));
     }
+
     if (_bottomIndex == 2) {
       return const Center(child: Text("Recent Calls"));
     }
+
     return _buildProfileTab();
   }
 
@@ -129,39 +129,30 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         children: [
           const SizedBox(height: 40),
-
           CircleAvatar(
             radius: 50,
             backgroundColor: Colors.black12,
-            backgroundImage:
-                avatarUrl != null ? NetworkImage(avatarUrl!) : null,
-            child: avatarUrl == null
-                ? const Icon(Icons.person, size: 40)
-                : null,
+            backgroundImage: avatarUrl != null
+                ? NetworkImage(avatarUrl!)
+                : const NetworkImage("https://i.pravatar.cc/300"),
           ),
-
           const SizedBox(height: 20),
-
           Text(
-            profileData?['username'] ?? "No Name",
+            profileData?['username'] ?? "Not Available",
             style: const TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
           ),
-
           const SizedBox(height: 5),
-
           Text(
-            user?.email ?? "No Email",
+            user?.email ?? "deepanshu@gmail.com",
             style: const TextStyle(
               fontSize: 14,
               color: Colors.grey,
             ),
           ),
-
           const SizedBox(height: 40),
-
           SizedBox(
             width: double.infinity,
             height: 50,
