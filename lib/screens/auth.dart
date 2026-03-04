@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../widgets/user_image_picker.dart';
 
-final _firebase = FirebaseAuth.instance;
+final supabase = Supabase.instance.client;
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -23,55 +25,97 @@ class _AuthScreenState extends State<AuthScreen> {
   final confirmPassword = TextEditingController();
   final name = TextEditingController();
 
+  File? _selectedImage;
+
   Future<void> _submit() async {
     final isValid = _formKey.currentState!.validate();
     if (!isValid) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final enteredEmail = email.text.trim();
     final enteredPassword = password.text.trim();
+    final enteredName = name.text.trim();
 
     try {
       if (selectedTab == 0) {
-        /// LOGIN
-        await _firebase.signInWithEmailAndPassword(
+        // LOGIN
+        await supabase.auth.signInWithPassword(
           email: enteredEmail,
           password: enteredPassword,
         );
       } else {
-        /// SIGNUP
-        await _firebase.createUserWithEmailAndPassword(
+        // SIGNUP
+
+        if (_selectedImage == null) {
+          throw Exception("Please select a profile image.");
+        }
+
+        final signUpResponse = await supabase.auth.signUp(
           email: enteredEmail,
           password: enteredPassword,
         );
+
+        if (signUpResponse.user == null) {
+          throw Exception("Signup failed");
+        }
+
+        if (signUpResponse.session == null) {
+          await supabase.auth.signInWithPassword(
+            email: enteredEmail,
+            password: enteredPassword,
+          );
+        }
+
+        final user = supabase.auth.currentUser;
+
+        if (user == null) {
+          throw Exception("User not authenticated");
+        }
+
+        final imagePath = 'user_images/${user.id}.jpg';
+
+        await supabase.storage
+            .from('avatars')
+            .upload(
+              imagePath,
+              _selectedImage!,
+              fileOptions: const FileOptions(upsert: true),
+            );
+
+        final imageUrl =
+            supabase.storage.from('avatars').getPublicUrl(imagePath);
+
+       print("USER ID: ${user.id}");
+print("IMAGE URL: $imageUrl");
+
+await supabase.from('users').insert({
+  'id': user.id,
+  'username': enteredName,
+  'email': enteredEmail,
+  'image_url': imageUrl,
+});
+
+print("USER INSERTED");
+        debugPrint("USER INSERTED SUCCESSFULLY");
       }
-    } on FirebaseAuthException catch (error) {
+    } on AuthException catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message ?? 'Authentication Failed'),
-        ),
+        SnackBar(content: Text(error.message)),
       );
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Something went wrong. Try again.'),
-        ),
+        SnackBar(content: Text(error.toString())),
       );
     }
 
     if (!mounted) return;
 
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -95,7 +139,6 @@ class _AuthScreenState extends State<AuthScreen> {
               children: [
                 const SizedBox(height: 40),
 
-                /// Logo
                 Container(
                   height: 70,
                   width: 70,
@@ -103,8 +146,11 @@ class _AuthScreenState extends State<AuthScreen> {
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(Icons.chat_bubble,
-                      color: Colors.white, size: 36),
+                  child: const Icon(
+                    Icons.chat_bubble,
+                    color: Colors.white,
+                    size: 36,
+                  ),
                 ),
 
                 const SizedBox(height: 20),
@@ -124,24 +170,62 @@ class _AuthScreenState extends State<AuthScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 30,
-                        offset: const Offset(0, 15),
-                      ),
-                    ],
                   ),
                   child: Form(
                     key: _formKey,
                     child: Column(
                       children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          child: selectedTab == 0
-                              ? _buildLogin()
-                              : _buildSignup(),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () =>
+                                    setState(() => selectedTab = 0),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: selectedTab == 0
+                                      ? Colors.black
+                                      : Colors.transparent,
+                                ),
+                                child: Text(
+                                  "Login",
+                                  style: TextStyle(
+                                    color: selectedTab == 0
+                                        ? Colors.white
+                                        : Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () =>
+                                    setState(() => selectedTab = 1),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: selectedTab == 1
+                                      ? Colors.black
+                                      : Colors.transparent,
+                                ),
+                                child: Text(
+                                  "Sign up",
+                                  style: TextStyle(
+                                    color: selectedTab == 1
+                                        ? Colors.white
+                                        : Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+
+                        const SizedBox(height: 20),
+
+                        selectedTab == 0
+                            ? _buildLogin()
+                            : _buildSignup(),
                       ],
                     ),
                   ),
@@ -156,16 +240,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _buildLogin() {
     return Column(
-      key: const ValueKey("login"),
       children: [
         _input("Email", email, false),
         const SizedBox(height: 20),
-        _input("Password", password, obscure,
-            suffix: IconButton(
-              icon: Icon(
-                  obscure ? Icons.visibility_off : Icons.visibility),
-              onPressed: () => setState(() => obscure = !obscure),
-            )),
+        _input("Password", password, obscure),
         const SizedBox(height: 30),
         _button("Login"),
       ],
@@ -174,37 +252,38 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _buildSignup() {
     return Column(
-      key: const ValueKey("signup"),
       children: [
+        UserImagePicker(
+          onPickImage: (pickedImage) {
+            _selectedImage = pickedImage;
+          },
+        ),
+
+        const SizedBox(height: 20),
+
         _input("Email", email, false),
+
         const SizedBox(height: 20),
-        _input("Password", password, obscure,
-            suffix: IconButton(
-              icon: Icon(
-                  obscure ? Icons.visibility_off : Icons.visibility),
-              onPressed: () => setState(() => obscure = !obscure),
-            )),
+
+        _input("Name", name, false),
+
         const SizedBox(height: 20),
-        _input("Confirm Password", confirmPassword, obscureConfirm,
-            suffix: IconButton(
-              icon: Icon(obscureConfirm
-                  ? Icons.visibility_off
-                  : Icons.visibility),
-              onPressed: () =>
-                  setState(() => obscureConfirm = !obscureConfirm),
-            )),
+
+        _input("Password", password, obscure),
+
+        const SizedBox(height: 20),
+
+        _input("Confirm Password", confirmPassword, obscureConfirm),
+
         const SizedBox(height: 30),
+
         _button("Create Account"),
       ],
     );
   }
 
   Widget _input(
-    String label,
-    TextEditingController controller,
-    bool obscureText, {
-    Widget? suffix,
-  }) {
+      String label, TextEditingController controller, bool obscureText) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -212,13 +291,15 @@ class _AuthScreenState extends State<AuthScreen> {
         if (value == null || value.trim().isEmpty) {
           return "$label is required";
         }
+
         if (label == "Password" && value.length < 6) {
           return "Minimum 6 characters required";
         }
-        if (label == "Confirm Password" &&
-            value != password.text) {
+
+        if (label == "Confirm Password" && value != password.text) {
           return "Passwords do not match";
         }
+
         return null;
       },
       decoration: InputDecoration(
@@ -229,7 +310,6 @@ class _AuthScreenState extends State<AuthScreen> {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
-        suffixIcon: suffix,
       ),
     );
   }
@@ -242,20 +322,15 @@ class _AuthScreenState extends State<AuthScreen> {
         onPressed: _isLoading ? null : _submit,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
         ),
         child: _isLoading
-            ? const CircularProgressIndicator(
-                color: Colors.white,
-              )
+            ? const CircularProgressIndicator(color: Colors.white)
             : Text(
                 text,
                 style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
                   color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
       ),

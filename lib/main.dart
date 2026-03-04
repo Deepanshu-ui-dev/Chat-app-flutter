@@ -1,40 +1,53 @@
 import 'package:chat_app/screens/auth.dart';
-import 'package:chat_app/screens/chat.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:chat_app/screens/chat_loader_screen.dart';
+import 'package:chat_app/skeleton/chathome.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-
-
-void main() async{
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-await Firebase.initializeApp(
-  options: DefaultFirebaseOptions.currentPlatform,
-);
-runApp(const MyApp());
+
+  // Load environment variables
+  await dotenv.load(fileName: "assets/.env");
+
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    final supabase = Supabase.instance.client;
+
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData().copyWith(
+      debugShowCheckedModeBanner: false,
+      title: 'Chat App',
+      theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: StreamBuilder(
-        stream: FirebaseAuth.instance.authStateChanges(), 
-        builder: (ctx,snapshot){
-          if(snapshot.hasData){
-            return ChatScreen();
+      home: StreamBuilder<AuthState>(
+        stream: supabase.auth.onAuthStateChange,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const ChatHomeSkeleton();
           }
+
+          final session = supabase.auth.currentSession;
+
+          if (session != null) {
+            return const ChatLoaderScreen();
+          }
+
           return const AuthScreen();
-        }),
+        },
+      ),
     );
   }
 }
