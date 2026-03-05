@@ -24,7 +24,9 @@ class _UserImagePickerState extends State<UserImagePicker> {
       maxWidth: 300,
     );
 
-    if (pickedImage == null) return;
+    if (pickedImage == null) {
+      return;
+    }
 
     final imageFile = File(pickedImage.path);
 

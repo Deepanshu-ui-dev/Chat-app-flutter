@@ -60,57 +60,50 @@ class _AuthScreenState extends State<AuthScreen> {
           throw Exception("Signup failed");
         }
 
+        final userId = signUpResponse.user!.id;
+
+final imagePath = "$userId.jpg";
+
+await supabase.storage
+    .from('avatars')
+    .upload(
+      imagePath,
+      _selectedImage!,
+      fileOptions: const FileOptions(upsert: true),
+    );
+
+final imageUrl =
+    supabase.storage.from('avatars').getPublicUrl(imagePath);
+
+await supabase.from('users').insert({
+  'id': userId,
+  'username': enteredName,
+  'email': enteredEmail,
+  'image_url': imageUrl,
+});
+
+        debugPrint("User row inserted. Now signing in...");
+
+        // Sign in AFTER data is committed — this triggers navigation
         if (signUpResponse.session == null) {
           await supabase.auth.signInWithPassword(
             email: enteredEmail,
             password: enteredPassword,
           );
         }
-
-        final user = supabase.auth.currentUser;
-
-        if (user == null) {
-          throw Exception("User not authenticated");
-        }
-
-        final imagePath = 'user_images/${user.id}.jpg';
-
-        await supabase.storage
-            .from('avatars')
-            .upload(
-              imagePath,
-              _selectedImage!,
-              fileOptions: const FileOptions(upsert: true),
-            );
-
-        final imageUrl =
-            supabase.storage.from('avatars').getPublicUrl(imagePath);
-
-       print("USER ID: ${user.id}");
-print("IMAGE URL: $imageUrl");
-
-await supabase.from('users').insert({
-  'id': user.id,
-  'username': enteredName,
-  'email': enteredEmail,
-  'image_url': imageUrl,
-});
-
-print("USER INSERTED");
-        debugPrint("USER INSERTED SUCCESSFULLY");
       }
     } on AuthException catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
 
     if (!mounted) return;
@@ -157,10 +150,7 @@ print("USER INSERTED");
 
                 const Text(
                   "Chatify",
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 40),
@@ -223,9 +213,7 @@ print("USER INSERTED");
 
                         const SizedBox(height: 20),
 
-                        selectedTab == 0
-                            ? _buildLogin()
-                            : _buildSignup(),
+                        selectedTab == 0 ? _buildLogin() : _buildSignup(),
                       ],
                     ),
                   ),
@@ -283,7 +271,10 @@ print("USER INSERTED");
   }
 
   Widget _input(
-      String label, TextEditingController controller, bool obscureText) {
+    String label,
+    TextEditingController controller,
+    bool obscureText,
+  ) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -320,9 +311,7 @@ print("USER INSERTED");
       height: 55,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _submit,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
         child: _isLoading
             ? const CircularProgressIndicator(color: Colors.white)
             : Text(

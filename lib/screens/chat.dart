@@ -38,14 +38,9 @@ class _ChatScreenState extends State<ChatScreen> {
           .eq('id', user!.id)
           .maybeSingle();
 
-      final imagePath = '${user!.id}.jpg';
-
-      final publicUrl =
-          supabase.storage.from('avatars').getPublicUrl(imagePath);
-
       setState(() {
         profileData = response;
-        avatarUrl = publicUrl;
+        avatarUrl = response?['image_url']; // ✅ Use image_url directly from DB
         isLoading = false;
       });
     } catch (e) {
@@ -64,10 +59,7 @@ class _ChatScreenState extends State<ChatScreen> {
         elevation: 0,
         title: const Text(
           "Chatify",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
       ),
       body: _buildBody(),
@@ -107,15 +99,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_bottomIndex == 0) {
       return const Center(child: Text("Chats Coming Soon"));
     }
-
     if (_bottomIndex == 1) {
       return const Center(child: Text("All Contacts"));
     }
-
     if (_bottomIndex == 2) {
       return const Center(child: Text("Recent Calls"));
     }
-
     return _buildProfileTab();
   }
 
@@ -131,26 +120,50 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 40),
           CircleAvatar(
             radius: 50,
-            backgroundColor: Colors.black12,
-            backgroundImage: avatarUrl != null
-                ? NetworkImage(avatarUrl!)
-                : const NetworkImage("https://i.pravatar.cc/300"),
+            backgroundColor: Colors.grey.shade200,
+            child: ClipOval(
+              child: (avatarUrl != null && avatarUrl!.isNotEmpty)
+                  ? Image.network(
+                      avatarUrl!,
+                      width: 100,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const SizedBox(
+                          width: 100,
+                          height: 100,
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2 , color: Colors.black,),
+                          ),
+                        );
+                      },
+                      
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.person,
+                          size: 50,
+                          color: Colors.grey,
+                        );
+                      },
+                    )
+                  : const Icon(
+                      Icons.person,
+                      size: 50,
+                      color: Colors.grey,
+                    ),
+            ),
           ),
           const SizedBox(height: 20),
           Text(
             profileData?['username'] ?? "Not Available",
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 5),
           Text(
-            user?.email ?? "deepanshu@gmail.com",
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
+            user?.email ?? "No Email",
+            style: const TextStyle(fontSize: 14, color: Colors.grey),
           ),
           const SizedBox(height: 40),
           SizedBox(
